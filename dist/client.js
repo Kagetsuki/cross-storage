@@ -72,8 +72,11 @@
     }
 
     // Create the frame if not found or specified
-    frame = frame || this._createFrame(url);
-    this._hub = frame.contentWindow;
+    if (frame) {
+      this._hub = frame.contentWindow;
+    } else {
+      this._createFrame(url)
+    }
   }
 
   /**
@@ -135,6 +138,37 @@
       return v.toString(16);
     });
   };
+
+  /**
+   * Returns a promise that is fulfilled when the container frame is ready.
+   *
+   * @returns {Promise} A promise that is resolved on connect
+   */
+  CrossStorageClient.prototype.onReadyFrame = function() {
+    var client = this;
+
+    if (this._hub) {
+      return this._promise.resolve();
+    } else if (this._closed) {
+      return this._promise.reject(new Error('CrossStorageClient has closed'));
+    }
+
+    return new this._promise(function(resolve, reject) {
+      var timeout = setTimeout(function() {
+        reject(new Error('CrossStorageClient could not ready frame'));
+      }, client._timeout);
+
+      var interval = setInterval(function() {
+        if (client._hub) {
+          clearTimeout(timeout);
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100)
+
+    });
+  };
+
 
   /**
    * Returns a promise that is fulfilled when a connection has been established
@@ -364,6 +398,7 @@
    * returns {HTMLIFrameElement} The iFrame element itself
    */
   CrossStorageClient.prototype._createFrame = function(url) {
+    var client = this;
     var frame, key;
 
     frame = window.document.createElement('iframe');
@@ -377,6 +412,9 @@
     }
 
     window.document.body.appendChild(frame);
+    frame.onload = function(){
+      client._hub = frame.contentWindow
+    }
     frame.src = url;
 
     return frame;
